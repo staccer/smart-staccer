@@ -5,6 +5,7 @@ dist
 .DS_Store
 package.ts
 wrappers
+coverage
 
 # VS Code
 .vscode/*
