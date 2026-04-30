@@ -1,0 +1,65 @@
+{
+  "0x0c1da2af0f0feee9e4c3c388a5b4434bce72fa807705d36cc49cc9f9b7e5fd7e": "SmartStaccer",
+  "SmartStaccer": {
+    "receivers": [
+      {
+        "receiver": "internal",
+        "message": {
+          "kind": "typed",
+          "type": "0x946a98b6"
+        }
+      },
+      {
+        "receiver": "internal",
+        "message": {
+          "kind": "typed",
+          "type": "0xaff90f57"
+        }
+      },
+      {
+        "receiver": "internal",
+        "message": {
+          "kind": "typed",
+          "type": "0x1ed7e7e9"
+        }
+      },
+      {
+        "receiver": "internal",
+        "message": {
+          "kind": "typed",
+          "type": "notSupported"
+        }
+      },
+      {
+        "receiver": "internal",
+        "message": {
+          "kind": "typed",
+          "type": "0xa8e8b121"
+        }
+      }
+    ],
+    "types": [
+      {
+        "name": "0x946a98b6",
+        "header": 2490013878
+      },
+      {
+        "name": "0xaff90f57",
+        "header": 2952335191
+      },
+      {
+        "name": "0x1ed7e7e9",
+        "header": 517466089
+      },
+      {
+        "name": "notSupported",
+        "header": 4294967295
+      },
+      {
+        "name": "0xa8e8b121",
+        "header": 2833821985
+      }
+    ],
+    "name": "SmartStaccer"
+  }
+}

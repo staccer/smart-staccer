@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tact-lang/tact/main/src/config/configSchema.json",
+  "projects": [
+    {
+      "name": "SmartStaccer",
+      "path": "contracts/smart_staccer.tact",
+      "output": "wrappers/SmartStaccer",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    }
+  ]
+}

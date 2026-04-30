@@ -1,0 +1,94 @@
+[
+  {
+    "label": "current",
+    "createdAt": "2026-04-30T15:26:18.614Z",
+    "result": {
+      "SmartStaccer": {
+        "send": {
+          "gasUsed": {
+            "kind": "init",
+            "value": "1937"
+          },
+          "cells": {
+            "kind": "init",
+            "value": "15"
+          },
+          "bits": {
+            "kind": "init",
+            "value": "7937"
+          }
+        },
+        "0x946a98b6": {
+          "gasUsed": {
+            "kind": "init",
+            "value": "4690"
+          },
+          "cells": {
+            "kind": "init",
+            "value": "15"
+          },
+          "bits": {
+            "kind": "init",
+            "value": "7937"
+          }
+        },
+        "0xaff90f57": {
+          "gasUsed": {
+            "kind": "init",
+            "value": "309"
+          },
+          "cells": {
+            "kind": "init",
+            "value": "15"
+          },
+          "bits": {
+            "kind": "init",
+            "value": "7937"
+          }
+        },
+        "0x1ed7e7e9": {
+          "gasUsed": {
+            "kind": "init",
+            "value": "5051"
+          },
+          "cells": {
+            "kind": "init",
+            "value": "15"
+          },
+          "bits": {
+            "kind": "init",
+            "value": "7937"
+          }
+        },
+        "notSupported": {
+          "gasUsed": {
+            "kind": "init",
+            "value": "309"
+          },
+          "cells": {
+            "kind": "init",
+            "value": "15"
+          },
+          "bits": {
+            "kind": "init",
+            "value": "7937"
+          }
+        },
+        "0xa8e8b121": {
+          "gasUsed": {
+            "kind": "init",
+            "value": "5429"
+          },
+          "cells": {
+            "kind": "init",
+            "value": "15"
+          },
+          "bits": {
+            "kind": "init",
+            "value": "7937"
+          }
+        }
+      }
+    }
+  }
+]
