@@ -1,4 +1,4 @@
-# 🔐 SmartStaccer: The Decentralized Trust Layer
+# SmartStaccer: The Decentralized Trust Layer
 
 This repository contains the source code for the **SmartStaccer** smart contract, built using [Tact](https://tact-lang.org/) for the TON Blockchain. 
 
@@ -7,7 +7,7 @@ This repository contains the source code for the **SmartStaccer** smart contract
 
 ---
 
-## 🛡️ Why Trust SmartStaccer?
+## Why Trust SmartStaccer?
 
 In the future update, all creator rewards will be governed by this contract. By making the code Open Source, we ensure:
 
@@ -17,7 +17,7 @@ In the future update, all creator rewards will be governed by this contract. By 
 
 ---
 
-## ⚙️ Technical Architecture
+## Technical Architecture
 
 The contract follows a strict 2-phase lifecycle for every sale:
 
@@ -26,7 +26,7 @@ The contract follows a strict 2-phase lifecycle for every sale:
 
 ---
 
-## 🛠 Developer Guide
+## Developer Guide
 
 ### Prerequisites
 *   Node.js & NPM
