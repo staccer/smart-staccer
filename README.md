@@ -17,12 +17,18 @@ In the future update, all creator rewards will be governed by this contract. By 
 
 ---
 
-## Technical Architecture
+## Technical Architecture & Safety
 
 The contract follows a strict 2-phase lifecycle for every sale:
 
-*   **NewSale:** The bot registers a sale ID, creator address, and USDT amount. The `releaseTime` is hardcoded to `now + 21 days`.
-*   **Claim & Withdraw:** Once the lock expires, the creator (and only the creator) can move funds to their available pool and trigger a `JettonTransfer` of USDT to their personal wallet.
+*   **NewSale:** The bot registers a sale. To prevent storage spam, a **Minimum Sale of 1.00 USDT** is enforced. The `releaseTime` is hardcoded to `now + 21 days`.
+*   **Claim & Withdraw:** Once the lock expires, funds move to the "Available Pool." Creators can trigger a withdrawal (Minimum **10.00 USDT**) to ensure transaction fees remain negligible compared to the payout.
+
+### The "Gas Tank" Concept (AdminWithdraw)
+We’ve implemented a **zero-friction payout** system. The contract acts as a "Gas Tank," holding a small TON balance to cover the network fees of outgoing USDT transfers. 
+*   Through the `AdminWithdraw` message, the Staccer bot can trigger payouts for the creator.
+*   **Result:** Creators can receive their earnings even if their wallet has a **0.00 TON balance**, making it the most accessible PPV tool on the market.
+
 
 ---
 

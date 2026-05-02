@@ -1,14 +1,17 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { toNano } from '@ton/core';
-import { SmartStaccer } from '../wrappers/SmartStaccer/SmartStaccer_SmartStaccer'; 
+import { SmartStaccer } from '../wrappers/SmartStaccer/SmartStaccer_SmartStaccer';  
 import '@ton/test-utils';
 
-describe('SmartStaccer Security & Multi-Sale Test', () => {
+describe('SmartStaccer Complete Ecosystem Test', () => {
     let blockchain: Blockchain;
     let botAdmin: SandboxContract<TreasuryContract>;
     let creator: SandboxContract<TreasuryContract>;
     let mockUsdtWallet: SandboxContract<TreasuryContract>;
     let smartStaccer: SandboxContract<SmartStaccer>;
+
+    // 6 decimals for USDT to match contract logic
+    const toUsdt = (amount: number) => BigInt(amount * 1000000);
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
@@ -20,65 +23,81 @@ describe('SmartStaccer Security & Multi-Sale Test', () => {
             await SmartStaccer.fromInit(botAdmin.address, mockUsdtWallet.address)
         );
 
+        // Deploy the contract
         await smartStaccer.send(botAdmin.getSender(), { value: toNano('0.05') }, { $$type: 'Deploy', queryId: 0n });
+        
+        // Fund the contract's "Gas Tank" with 2 TON so it can pay for withdrawals
+        await smartStaccer.send(botAdmin.getSender(), { value: toNano('2') }, null);
     });
 
-    it('should pass all security and multi-sale scenarios', async () => {
-        console.log("--- STARTING SECURITY & MULTI-SALE TEST ---");
+    it('should pass full lifecycle: security, limits, claims, and 0-fee withdrawal', async () => {
+        console.log("\n--- STARTING COMPREHENSIVE TEST ---");
 
         // 1. UNAUTHORIZED SALE ATTEMPT
-        console.log("TEST: Attempting to register sale as non-admin (Should fail)...");
+        console.log("TEST 1: Non-admin trying to register sale...");
         const hackerResult = await smartStaccer.send(creator.getSender(), { value: toNano('0.05') }, {
-            $$type: 'NewSale', saleId: 999n, creator: creator.address, usdtAmount: toNano('1000')
+            $$type: 'NewSale', saleId: 999n, creator: creator.address, usdtAmount: toUsdt(100)
         });
-        
-        expect(hackerResult.transactions).toHaveTransaction({
-            from: creator.address,
-            to: smartStaccer.address,
-            success: false
-        });
-        console.log("✅ Security Verified: Non-admin cannot create sales.");
+        expect(hackerResult.transactions).toHaveTransaction({ from: creator.address, success: false });
+        console.log("✅ Blocked: Hacker cannot create sales.");
 
-        // 2. TWO SALES REGISTRATION
-        console.log("TEST: Registering 2 sales (50 USDT and 30 USDT)...");
+        // 2. BELOW MINIMUM SALE ATTEMPT
+        console.log("TEST 2: Admin registering a sale under 1 USDT limit...");
+        const tinySale = await smartStaccer.send(botAdmin.getSender(), { value: toNano('0.05') }, {
+            $$type: 'NewSale', saleId: 100n, creator: creator.address, usdtAmount: toUsdt(0.5) // 0.5 USDT
+        });
+        expect(tinySale.transactions).toHaveTransaction({ success: false });
+        console.log("✅ Blocked: Dust sales (< 1 USDT) rejected to save storage.");
+
+        // 3. REGISTER TWO VALID SALES
+        console.log("TEST 3: Registering 2 valid sales (50 USDT and 30 USDT)...");
         await smartStaccer.send(botAdmin.getSender(), { value: toNano('0.05') }, {
-            $$type: 'NewSale', saleId: 101n, creator: creator.address, usdtAmount: toNano('50')
+            $$type: 'NewSale', saleId: 101n, creator: creator.address, usdtAmount: toUsdt(50)
         });
         await smartStaccer.send(botAdmin.getSender(), { value: toNano('0.05') }, {
-            $$type: 'NewSale', saleId: 102n, creator: creator.address, usdtAmount: toNano('30')
+            $$type: 'NewSale', saleId: 102n, creator: creator.address, usdtAmount: toUsdt(30)
         });
 
-        // PRINT INDIVIDUAL SALE DATA (Fixed method name)
-        const sale1 = await smartStaccer.getSaleInfo(101n);
-        console.log(`Sale 101 Data: Amount=${sale1?.usdtAmount}, Release=${sale1?.releaseTime}`);
-        
-        // 3. EARLY CLAIM ATTEMPT
-        console.log("TEST: Attempting to claim sale BEFORE 21 days (Should fail)...");
+        const sale1 = await smartStaccer.getSale(101n);
+        console.log(`Sale 101 Confirmed: Lock expires at timestamp ${sale1?.releaseTime}`);
+
+        // 4. EARLY CLAIM ATTEMPT
+        console.log("TEST 4: Attempting claim BEFORE 21 days...");
         const earlyClaim = await smartStaccer.send(creator.getSender(), { value: toNano('0.05') }, {
             $$type: 'ClaimSale', saleId: 101n
         });
-        
-        expect(earlyClaim.transactions).toHaveTransaction({
-            success: false
-        });
-        console.log("✅ Security Verified: Cannot claim before lockup expires.");
+        expect(earlyClaim.transactions).toHaveTransaction({ success: false });
+        console.log("✅ Blocked: 21-day lockup holds strong.");
 
-        // 4. TIME TRAVEL & CLAIM BOTH
-        console.log("Action: Jumping 22 days into the future...");
+        // 5. TIME TRAVEL & CLAIM
+        console.log("TEST 5: Time traveling 22 days into the future...");
         blockchain.now = Math.floor(Date.now() / 1000) + (22 * 24 * 60 * 60);
 
-        console.log("Action: Claiming both sales...");
         await smartStaccer.send(creator.getSender(), { value: toNano('0.05') }, { $$type: 'ClaimSale', saleId: 101n });
         await smartStaccer.send(creator.getSender(), { value: toNano('0.05') }, { $$type: 'ClaimSale', saleId: 102n });
 
-        // 5. PRINT & VERIFY TOTAL POOL BALANCE (Fixed method name)
-        const poolBalance = await smartStaccer.getBalanceOf(creator.address);
-        console.log("Total Available Pool Balance for Creator:", poolBalance.toString());
-        
-        // 50 + 30 = 80
-        expect(poolBalance).toBe(toNano('80'));
-        console.log("✅ Logic Verified: Multiple sales combined correctly into pool.");
+        const poolBalance = await smartStaccer.getBalance(creator.address);
+        expect(poolBalance).toBe(toUsdt(80)); // 50 + 30
+        console.log(`✅ Success: Creator available pool is now ${poolBalance} (80 USDT).`);
 
-        console.log("--- ALL TESTS PASSED ---");
+        // 6. WITHDRAW BELOW MINIMUM
+        console.log("TEST 6: Creator trying to withdraw 5 USDT (Below 10 USDT minimum)...");
+        const tinyWithdraw = await smartStaccer.send(botAdmin.getSender(), { value: toNano('0.05') }, { 
+            $$type: 'AdminWithdraw', creator: creator.address, amount: toUsdt(5) 
+        });
+        expect(tinyWithdraw.transactions).toHaveTransaction({ success: false });
+        console.log("✅ Blocked: Minimum withdrawal limits enforced.");
+
+        // 7. ZERO-FEE ADMIN WITHDRAWAL
+        console.log("TEST 7: Bot triggering a 20 USDT withdrawal on behalf of the creator (0 Gas for creator)...");
+        await smartStaccer.send(botAdmin.getSender(), { value: toNano('0.05') }, { 
+            $$type: 'AdminWithdraw', creator: creator.address, amount: toUsdt(20) 
+        });
+
+        const finalBalance = await smartStaccer.getBalance(creator.address);
+        expect(finalBalance).toBe(toUsdt(60)); // 80 - 20
+        console.log(`✅ Success: 20 USDT withdrawn. Remaining pool balance is ${finalBalance} (60 USDT).`);
+
+        console.log("--- ALL SECURE LOGIC VERIFIED --- \n");
     });
 });

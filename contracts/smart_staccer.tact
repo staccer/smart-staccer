@@ -1,20 +1,49 @@
 import "@stdlib/deploy";
 
+// --- CONSTANTS (USDT has 6 Decimals) ---
+const MIN_SALE: Int = 1000000;          // 1.00 USDT
+const MIN_WITHDRAW: Int = 10000000;     // 10.00 USDT
+const LOCK_PERIOD: Int = 1814400;       // 21 Days in seconds
+const GAS_CONSUMPTION: Int = ton("0.05"); // Gas provided by contract for Jetton transfer
+
 // --- MESSAGES ---
-message NewSale { saleId: Int as uint64; creator: Address; usdtAmount: Int as coins; }
-message CancelSale { saleId: Int as uint64; }
-message ClaimSale { saleId: Int as uint64; }
-message Withdraw { amount: Int as coins; }
+message NewSale { 
+    saleId: Int as uint64; 
+    creator: Address; 
+    usdtAmount: Int as coins; 
+}
 
-message WithdrawalEvent { creator: Address; amount: Int as coins; }
+message ClaimSale { 
+    saleId: Int as uint64; 
+}
 
+// User triggers this (requires user to have tiny gas)
+message Withdraw { 
+    amount: Int as coins; 
+}
+
+// Admin triggers this (Creator pays 0 gas)
+message AdminWithdraw {
+    creator: Address;
+    amount: Int as coins;
+}
+
+// Standard Jetton Transfer Body
 message(0x0f8a7ea5) JettonTransfer {
-    query_id: Int as uint64; amount: Int as coins; destination: Address;
-    response_destination: Address; custom_payload: Cell?; forward_ton_amount: Int as coins;
+    query_id: Int as uint64;
+    amount: Int as coins;
+    destination: Address;
+    response_destination: Address;
+    custom_payload: Cell?;
+    forward_ton_amount: Int as coins;
     forward_payload: Slice as remaining;
 }
 
-struct SaleRecord { creator: Address; usdtAmount: Int as coins; releaseTime: Int as uint32; }
+struct SaleRecord { 
+    creator: Address; 
+    usdtAmount: Int as coins; 
+    releaseTime: Int as uint32; 
+}
 
 contract SmartStaccer with Deployable {
     admin: Address;             
@@ -27,74 +56,103 @@ contract SmartStaccer with Deployable {
         self.usdtWalletAddress = usdtWalletAddress;
     }
 
+    // --- 1. DEPOSIT GAS ---
+    // Allows the admin to top up the contract's TON balance to pay for creator withdrawals
+    receive() {
+        dump("Gas Tank Refilled");
+    }
+
+    // --- 2. REGISTER SALE ---
     receive(msg: NewSale) {
-        require(sender() == self.admin, "Only bot admin allowed");
-        dump("LOG: Registering New Sale");
-        dump(msg.saleId);
+        require(sender() == self.admin, "Only admin can register sales");
+        require(msg.usdtAmount >= MIN_SALE, "Sale amount below minimum");
 
         self.sales.set(msg.saleId, SaleRecord{
             creator: msg.creator,
             usdtAmount: msg.usdtAmount,
-            releaseTime: now() + 1814400 
+            releaseTime: now() + LOCK_PERIOD
         });
     }
 
+    // --- 3. CLAIM SALE (Unlock to Balance) ---
     receive(msg: ClaimSale) {
         let sale: SaleRecord? = self.sales.get(msg.saleId);
-        require(sale != null, "Sale not found");
+        require(sale != null, "Sale record not found");
         let s: SaleRecord = sale!!;
         
-        dump("LOG: Claim Attempt for SaleID");
-        dump(msg.saleId);
+        require(now() >= s.releaseTime, "Funds are still in 21-day lockup");
 
-        require(now() >= s.releaseTime, "Funds locked");
-
+        // Safe Map Unwrapping
         let current: Int = 0;
         let existingBalance: Int? = self.availableBalances.get(s.creator);
-        if (existingBalance != null) { current = existingBalance!!; }
+        if (existingBalance != null) {
+            current = existingBalance!!;
+        }
         
         self.availableBalances.set(s.creator, current + s.usdtAmount);
-        self.sales.set(msg.saleId, null);
-        dump("LOG: Claim Successful. New Pool Balance:");
-        dump(current + s.usdtAmount);
+        self.sales.set(msg.saleId, null); // Clear storage to save gas/rent
     }
 
-    receive(msg: Withdraw) {
+    // --- 4. WITHDRAWAL LOGIC ---
+    
+    // Internal helper to handle the actual USDT movement
+    fun processWithdrawal(target: Address, amount: Int) {
+        // Safe Map Unwrapping
         let current: Int = 0;
-        let existingBalance: Int? = self.availableBalances.get(sender());
-        if (existingBalance != null) { current = existingBalance!!; }
+        let existingBalance: Int? = self.availableBalances.get(target);
+        if (existingBalance != null) {
+            current = existingBalance!!;
+        }
 
-        dump("LOG: Withdrawal Requested");
-        dump(msg.amount);
+        require(amount >= MIN_WITHDRAW, "Minimum withdrawal is 10 USDT");
+        require(current >= amount, "Insufficient creator balance");
 
-        require(msg.amount > 0, "Amount must be > 0");
-        require(current >= msg.amount, "Insufficient balance");
+        // Update balance before sending (Prevents Reentrancy)
+        self.availableBalances.set(target, current - amount);
 
-        self.availableBalances.set(sender(), current - msg.amount);
-
+        // Send USDT using the CONTRACT'S TON balance
         send(SendParameters{
             to: self.usdtWalletAddress,
-            value: ton("0.05"),
-            mode: SendPayGasSeparately,
+            value: GAS_CONSUMPTION, 
+            mode: SendIgnoreErrors, // Don't crash contract if transfer fails
             body: JettonTransfer{
-                query_id: 0, amount: msg.amount, destination: sender(),
-                response_destination: sender(), custom_payload: null,
-                forward_ton_amount: ton("0.01"), forward_payload: emptySlice()
+                query_id: 0, 
+                amount: amount, 
+                destination: target,
+                response_destination: self.admin, // Leftover gas goes to admin
+                custom_payload: null,
+                forward_ton_amount: ton("0.01"), 
+                forward_payload: emptySlice()
             }.toCell()
         });
-
-        emit(WithdrawalEvent{ creator: sender(), amount: msg.amount }.toCell());
     }
 
-    // Fixed naming to match TypeScript preferences
-    get fun balanceOf(creator: Address): Int {
+    // Case A: Creator has a little TON and triggers it themselves
+    receive(msg: Withdraw) {
+        self.processWithdrawal(sender(), msg.amount);
+    }
+
+    // Case B: Creator clicks button in Bot, Admin triggers it (Creator pays 0)
+    receive(msg: AdminWithdraw) {
+        require(sender() == self.admin, "Only admin can trigger zero-fee withdrawals");
+        self.processWithdrawal(msg.creator, msg.amount);
+    }
+
+    // --- GETTERS ---
+
+    get fun balance(creator: Address): Int {
         let existingBalance: Int? = self.availableBalances.get(creator);
-        if (existingBalance != null) { return existingBalance!!; }
+        if (existingBalance != null) {
+            return existingBalance!!;
+        }
         return 0;
     }
 
-    // NEW: Added the missing getter so the test can read the sale details
-    get fun saleInfo(saleId: Int): SaleRecord? {
+    get fun sale(saleId: Int): SaleRecord? {
         return self.sales.get(saleId);
+    }
+
+    get fun contractTonBalance(): Int {
+        return myBalance();
     }
 }
