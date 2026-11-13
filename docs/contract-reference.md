@@ -105,3 +105,28 @@ Worth knowing before you trust it as a complete verification:
 - **No duplicate-`saleId` test.** The overwrite behaviour described above is untested.
 
 Run it with `npm test`. See the README for the full build sequence.
+
+## Tolk port
+
+`contracts/smart_staccer.tolk` implements the same contract in Tolk. Storage layout, message fields, getters and constants are identical; what differs is the error surface — Tolk throws numeric exit codes instead of string messages:
+
+| Exit code | Meaning |
+|---|---|
+| 401 | `NewSale` from a non-admin |
+| 402 | `NewSale` below 1 USDT |
+| 403 | `ClaimSale` for an unknown `saleId` |
+| 404 | `ClaimSale` before `releaseTime` |
+| 405 | withdrawal below 10 USDT |
+| 406 | withdrawal above the creator's balance |
+| 407 | `AdminWithdraw` from a non-admin |
+| `0xFFFF` | unrecognised opcode with a non-empty body |
+
+Message opcodes are explicit and reproducible: `crc32` of the message name, so `NewSale` = `0xfeaec34b`, `ClaimSale` = `0x81f78480`, `Withdraw` = `0x4ca83dc8`, `AdminWithdraw` = `0x4fa215c9`.
+
+Two behavioural differences from the Tact version, both deliberate:
+
+- An empty body is accepted silently. The Tact version dumps `"Gas Tank Refilled"`; Tolk has no equivalent log here, and the coins simply stay in the contract.
+- Storage is loaded explicitly (`Storage.load()` / `Storage.save()`), so every write path saves once at the end rather than per field.
+
+`tests/SmartStaccer.tolk.spec.ts` compiles the Tolk source at test time and runs ten assertions against the resulting code cell, including the two paths the Tact suite never touches: a creator-initiated `Withdraw` and an `AdminWithdraw` sent by a non-admin.
+
